@@ -7,67 +7,88 @@ import android.content.pm.ShortcutManager
 import android.graphics.drawable.Icon
 import android.os.Build
 import androidx.annotation.RequiresApi
-import com.topjohnwu.magisk.*
-import com.topjohnwu.magisk.ui.SplashActivity
-import com.topjohnwu.magisk.utils.DynAPK
-import com.topjohnwu.magisk.utils.Utils
-import com.topjohnwu.superuser.Shell
+import androidx.core.content.getSystemService
+import androidx.core.content.pm.ShortcutInfoCompat
+import androidx.core.content.pm.ShortcutManagerCompat
+import androidx.core.graphics.drawable.IconCompat
+import com.topjohnwu.magisk.R
+import com.topjohnwu.magisk.core.Const
+import com.topjohnwu.magisk.core.Info
+import com.topjohnwu.magisk.core.isRunningAsStub
+import com.topjohnwu.magisk.core.ktx.getBitmap
 
 object Shortcuts {
 
-    fun setup(context: Context) {
-        if (Build.VERSION.SDK_INT >= 25) {
-            val manager = context.getSystemService(ShortcutManager::class.java)
-            manager?.dynamicShortcuts = getShortCuts(context)
+    fun setupDynamic(context: Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N_MR1) {
+            val manager = context.getSystemService<ShortcutManager>() ?: return
+            manager.dynamicShortcuts = getShortCuts(context)
+        }
+    }
+
+    fun addHomeIcon(context: Context) {
+        val intent = context.packageManager.getLaunchIntentForPackage(context.packageName) ?: return
+        val info = ShortcutInfoCompat.Builder(context, Const.Nav.HOME)
+            .setShortLabel(context.getString(R.string.magisk))
+            .setIntent(intent)
+            .setIcon(context.getIconCompat(R.drawable.ic_launcher))
+            .build()
+        ShortcutManagerCompat.requestPinShortcut(context, info, null)
+    }
+
+    private fun Context.getIcon(id: Int): Icon {
+        return if (isRunningAsStub) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                Icon.createWithAdaptiveBitmap(getBitmap(id))
+            else
+                Icon.createWithBitmap(getBitmap(id))
+        } else {
+            Icon.createWithResource(this, id)
+        }
+    }
+
+    private fun Context.getIconCompat(id: Int): IconCompat {
+        return if (isRunningAsStub) {
+            val bitmap = getBitmap(id)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                IconCompat.createWithAdaptiveBitmap(bitmap)
+            else
+                IconCompat.createWithBitmap(bitmap)
+        } else {
+            IconCompat.createWithResource(this, id)
         }
     }
 
     @RequiresApi(api = 25)
     private fun getShortCuts(context: Context): List<ShortcutInfo> {
+        val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+            ?: return emptyList()
+
         val shortCuts = mutableListOf<ShortcutInfo>()
-        val root = Shell.rootAccess()
-        val intent = context.intent(SplashActivity::class.java)
-        if (Utils.showSuperUser()) {
-            shortCuts.add(ShortcutInfo.Builder(context, "superuser")
+
+        if (Info.showSuperUser) {
+            shortCuts.add(
+                ShortcutInfo.Builder(context, Const.Nav.SUPERUSER)
                     .setShortLabel(context.getString(R.string.superuser))
-                    .setIntent(Intent(intent)
-                            .putExtra(Const.Key.OPEN_SECTION, "superuser")
-                            .setAction(Intent.ACTION_VIEW)
-                            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK))
-                    .setIcon(Icon.createWithResource(context, resolveRes(DynAPK.SUPERUSER)))
+                    .setIntent(
+                        Intent(intent).putExtra(Const.Key.OPEN_SECTION, Const.Nav.SUPERUSER)
+                    )
+                    .setIcon(context.getIcon(R.drawable.sc_superuser))
                     .setRank(0)
-                    .build())
+                    .build()
+            )
         }
-        if (root && Config.magiskHide) {
-            shortCuts.add(ShortcutInfo.Builder(context, "magiskhide")
-                    .setShortLabel(context.getString(R.string.magiskhide))
-                    .setIntent(Intent(intent)
-                            .putExtra(Const.Key.OPEN_SECTION, "magiskhide")
-                            .setAction(Intent.ACTION_VIEW)
-                            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK))
-                    .setIcon(Icon.createWithResource(context, resolveRes(DynAPK.MAGISKHIDE)))
-                    .setRank(1)
-                    .build())
-        }
-        if (!Config.coreOnly && root && Info.magiskVersionCode >= 0) {
-            shortCuts.add(ShortcutInfo.Builder(context, "modules")
+        if (Info.env.isActive) {
+            shortCuts.add(
+                ShortcutInfo.Builder(context, Const.Nav.MODULES)
                     .setShortLabel(context.getString(R.string.modules))
-                    .setIntent(Intent(intent)
-                            .putExtra(Const.Key.OPEN_SECTION, "modules")
-                            .setAction(Intent.ACTION_VIEW)
-                            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK))
-                    .setIcon(Icon.createWithResource(context, resolveRes(DynAPK.MODULES)))
-                    .setRank(3)
-                    .build())
-            shortCuts.add(ShortcutInfo.Builder(context, "downloads")
-                    .setShortLabel(context.getString(R.string.downloads))
-                    .setIntent(Intent(intent)
-                            .putExtra(Const.Key.OPEN_SECTION, "downloads")
-                            .setAction(Intent.ACTION_VIEW)
-                            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK))
-                    .setIcon(Icon.createWithResource(context, resolveRes(DynAPK.DOWNLOAD)))
-                    .setRank(2)
-                    .build())
+                    .setIntent(
+                        Intent(intent).putExtra(Const.Key.OPEN_SECTION, Const.Nav.MODULES)
+                    )
+                    .setIcon(context.getIcon(R.drawable.sc_extension))
+                    .setRank(1)
+                    .build()
+            )
         }
         return shortCuts
     }
